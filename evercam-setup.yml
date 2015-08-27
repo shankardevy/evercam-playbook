@@ -1,0 +1,4 @@
+---
+- include: media-setup.yml
+- include: api-setup.yml
+- include: dash-setup.yml

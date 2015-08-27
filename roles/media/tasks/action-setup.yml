@@ -1,0 +1,57 @@
+---
+# - include: common.yml
+#   become: yes
+#   become_method: su
+#
+
+- name: "check for swap file path"
+  stat: path="/swap"
+  register: swap_info
+
+- when: create_swap_file == True and swap_info.stat.exists == False
+  include: create-swap-file.yml
+  become: yes
+  become_method: sudo
+
+- include: pip.yml
+  become: yes
+  become_method: sudo
+
+- include: deployer-user.yml
+  become: yes
+  become_method: sudo
+
+- include: asdf.yml
+
+
+- when: setup_postgres == True
+  include: postgres-facts.yml
+
+- name: "debug pg credentials"
+  debug: var=database_password
+
+- when: setup_postgres == True
+  include: postgres.yml
+  become: yes
+  become_method: sudo
+
+- include: project.yml
+  become: yes
+  become_user: "{{deployer}}"
+
+- when: build_frontend == True
+  include: frontend.yml
+  become: yes
+  become_user: "{{deployer}}"
+  
+- include: nginx.yml
+- include: monit.yml
+- include: release.yml
+
+
+- name: start nginx using monit
+  monit: name="nginx" state=started
+
+
+- name: reload nginx config
+  service: name=nginx state=reloaded

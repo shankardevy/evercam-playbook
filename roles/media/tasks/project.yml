@@ -1,0 +1,104 @@
+---
+
+- name: "clone project"
+  git:
+    repo: "{{ media_repo_url }}"
+    version: "{{ git_ref }}"
+    dest: "{{ project_path }}"
+    accept_hostkey: True
+    force: True
+
+
+- name: check if custom template for .tool-versions exists
+  local_action: stat path="templates/tool-versions.j2"
+  register: custom_tool_versions_template
+  sudo: no
+
+
+- when: custom_tool_versions_template.stat.exists == False
+  name: add .tool-versions from default template
+  template:
+    src: default-tool-versions.j2
+    dest: "{{ project_path }}/.tool-versions"
+
+
+- when: custom_tool_versions_template.stat.exists == True
+  name: add .tool-versions from custom template provided
+  template:
+    src: templates/tool-versions.j2
+    dest: "{{ project_path }}/.tool-versions"
+
+
+- name: "install tool versions"
+  command: bash -lc 'asdf install' chdir="{{ project_path }}"
+  async: 1800
+
+
+- name: "generate secret key base"
+  command: "openssl rand -base64 {{ secret_key_base_length }}"
+  register: openssl_random_string
+
+
+- name: set secret_key_base
+  set_fact: secret_key_base="{{ openssl_random_string.stdout }}"
+
+
+- name: detect endpoint module
+  command: grep -m 1 -o '[[:alnum:]]*.Endpoint' {{ project_path }}/config/dev.exs
+  register: grep_endpoint_module
+
+
+- name: set app_endpoint_module fact
+  set_fact: app_endpoint_module="{{ grep_endpoint_module.stdout }}"
+
+
+- name: detect repo module
+  command: grep -m 1 -o '[[:alnum:]]*.Repo' {{ project_path }}/config/dev.exs
+  register: grep_repo_module
+
+
+- name: set app_repo_module fact
+  set_fact: app_repo_module="{{ grep_repo_module.stdout }}"
+
+
+- name: check if custom template for prod.secret.exs exists
+  local_action: stat path="templates/prod.secret.exs.j2"
+  register: custom_prod_secret_template
+  sudo: no
+
+
+- when: custom_prod_secret_template.stat.exists == False
+  name: add prod.secret.exs from default template
+  template:
+    src: default-prod.secret.exs.j2
+    dest: "{{ project_path }}/config/prod.secret.exs"
+
+
+- when: custom_prod_secret_template.stat.exists == True
+  name: add prod.secret.exs from custom template provided
+  template:
+    src: templates/prod.secret.exs.j2
+    dest: "{{ project_path }}/config/prod.secret.exs"
+
+
+- name: check if conform config exists
+  local_action: stat path="templates/{{ app_name }}.conf.j2"
+  register: conform_config_template
+  sudo: no
+
+- when: conform_config_template.stat.exists == True
+  name: add conform config from custom template provided
+  template:
+    src: "templates/{{ app_name }}.conf.j2"
+    dest: "{{ project_path }}/config/{{ app_name }}.conf"
+
+- name: install hex
+  command: bash -lc "mix local.hex --force" chdir="{{ project_path }}"
+
+- name: install rebar
+  command: bash -lc "mix local.rebar --force" chdir="{{ project_path }}"
+
+- name: "fetch mix dependencies"
+  command: bash -lc 'mix deps.get' chdir="{{ project_path }}"
+  environment:
+    MIX_ENV: "{{ mix_env }}"

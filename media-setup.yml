@@ -1,0 +1,8 @@
+---
+- hosts: media-server
+  remote_user: ubuntu
+  vars_files:
+    - vars/main.yml
+
+  roles:
+    - {role: "media", action: "setup"}
